@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Itinéraire Quad - Suivre la Route ou Ligne Directe</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+  <style>
+    body { margin: 0; font-family: sans-serif; }
+    h1 { text-align: center; padding: 1rem; }
+    #map { height: 80vh; width: 100%; }
+    #controls {
+      text-align: center;
+      margin: 10px;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+      margin: 0 5px;
+    }
+    #distance {
+      text-align: center;
+      font-size: 18px;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Itinéraire Quad - Suivre la Route ou Ligne Directe</h1>
+  <div id="map"></div>
+  <div id="distance">Distance: 0 km</div>
+  <div id="controls">
+    <button id="reset">Réinitialiser</button>
+    <button id="exportGPX">Exporter en GPX</button>
+    <button id="undo">Annuler dernier point</button>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+  <script>
+    const map = L.map('map', {
+      zoomControl: true,
+      inertia: false
+    }).setView([48.8566, 2.3522], 13);
+
+    L.tileLayer('https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v11/tiles/{z}/{x}/{y}?access_token=pk.eyJ1IjoibWFudTc1MGdzeHIiLCJhIjoiY205aTZjaGw3MGJhbzJqc2NmcjU3bTJhdyJ9.BPVw3T_ApvhxVh7AZB__sA', {
+      attribution: '© OpenStreetMap, © Mapbox',
+      tileSize: 512,
+      zoomOffset: -1
+    }).addTo(map);
+
+    const apiKey = '0b8d85db-6d70-405c-996c-d8f5fe47845f';
+    let points = [], markers = [], segments = [], colors = [], originalSegments = [], polylines = [];
+
+    map.on('click', async (e) => {
+      const { lat, lng } = e.latlng;
+      const marker = L.marker([lat, lng]).addTo(map);
+      markers.push(marker);
+      points.push([lat, lng]);
+
+      if (points.length > 1) {
+        const start = points[points.length - 2];
+        const end = points[points.length - 1];
+        const { segment, color } = await getSegment(start, end);
+        originalSegments.push({ segment, color });
+        drawRoute();
+      } else {
+        updateDistance();
+      }
+    });
+
+    function drawRoute() {
+      segments = [];
+      colors = [];
+      polylines.forEach(p => map.removeLayer(p));
+      polylines = [];
+
+      originalSegments.forEach(({ segment, color }) => {
+        segments.push(...segment);
+        colors.push(color);
+      });
+
+      let currentSegment = [], currentColor = colors[0] || 'blue';
+      for (let i = 0; i < segments.length; i++) {
+        currentSegment.push(segments[i]);
+        if (i === segments.length - 1 || colors[i + 1] !== currentColor) {
+          const poly = L.polyline(currentSegment, { color: currentColor, weight: 4 }).addTo(map);
+          polylines.push(poly);
+          currentSegment = [];
+          currentColor = colors[i + 1];
+        }
+      }
+      updateDistance();
+    }
+
+    async function getSegment(start, end) {
+      const url = new URL('https://graphhopper.com/api/1/route');
+      url.searchParams.append('point', `${start[0]},${start[1]}`);
+      url.searchParams.append('point', `${end[0]},${end[1]}`);
+      url.searchParams.append('vehicle', 'bike');
+      url.searchParams.append('points_encoded', 'false');
+      url.searchParams.append('key', apiKey);
+
+      try {
+        const res = await fetch(url);
+        const data = await res.json();
+        if (data.paths && data.paths.length > 0) {
+          const coords = data.paths[0].points.coordinates.map(([lng, lat]) => [lat, lng]);
+          return { segment: coords, color: 'blue' };
+        } else {
+          return { segment: [start, end], color: 'green' };
+        }
+      } catch (err) {
+        return { segment: [start, end], color: 'green' };
+      }
+    }
+
+    function calculateDistance(lat1, lon1, lat2, lon2) {
+      const R = 6371000;
+      const φ1 = lat1 * Math.PI / 180;
+      const φ2 = lat2 * Math.PI / 180;
+      const Δφ = (lat2 - lat1) * Math.PI / 180;
+      const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+      const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+                Math.cos(φ1) * Math.cos(φ2) *
+                Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return R * c;
+    }
+
+    function updateDistance() {
+      let dist = 0;
+      for (let segmentObj of originalSegments) {
+        const segment = segmentObj.segment;
+        for (let i = 1; i < segment.length; i++) {
+          dist += calculateDistance(segment[i - 1][0], segment[i - 1][1], segment[i][0], segment[i][1]);
+        }
+      }
+      document.getElementById('distance').textContent = `Distance: ${(dist / 1000).toFixed(2)} km`;
+    }
+
+	function exportToGPX() {
+	  if (points.length < 2) return alert("Ajoute au moins deux points.");
+
+	  const name = prompt("Nom du fichier GPX:", "itineraire_quad") || "itineraire_quad";
+
+	  let gpxContent = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+	  gpxContent += `<gpx version="1.1" creator="QuadLibre" xmlns="http://www.topografix.com/GPX/1/1">\n`;
+	  gpxContent += `<trk><name>${name}</name><trkseg>\n`;
+
+	  for (let [lat, lng] of points) {
+		gpxContent += `  <trkpt lat="${lat}" lon="${lng}"></trkpt>\n`;
+	  }
+
+	  gpxContent += `</trkseg></trk></gpx>`;
+
+	  const blob = new Blob([gpxContent], { type: 'application/gpx+xml' });
+	  const url = URL.createObjectURL(blob);
+
+	  const a = document.createElement('a');
+	  a.href = url;
+	  a.download = `${name}.gpx`;
+	  a.click();
+	}
+
+
+    function resetMap() {
+      points = [];
+      segments = [];
+      colors = [];
+      originalSegments = [];
+      markers.forEach(m => map.removeLayer(m));
+      markers = [];
+      polylines.forEach(p => map.removeLayer(p));
+      polylines = [];
+      document.getElementById('distance').textContent = `Distance: 0 km`;
+    }
+
+    document.getElementById('reset').addEventListener('click', resetMap);
+    document.getElementById('exportGPX').addEventListener('click', exportToGPX);
+
+    document.getElementById('undo').addEventListener('click', async () => {
+      if (points.length <= 0) return;
+      const lastMarker = markers.pop();
+      if (lastMarker) map.removeLayer(lastMarker);
+      points.pop();
+      if (points.length < 2) {
+        segments = [];
+        colors = [];
+        originalSegments = [];
+      } else {
+        originalSegments = [];
+        for (let i = 1; i < points.length; i++) {
+          const { segment, color } = await getSegment(points[i - 1], points[i]);
+          originalSegments.push({ segment, color });
+        }
+      }
+      drawRoute();
+    });
+  </script>
+</body>
+</html>
