@@ -6,22 +6,65 @@
   <title>Itinéraire Quad - Suivre la Route ou Ligne Directe</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
   <style>
-    body { margin: 0; font-family: sans-serif; }
-    h1 { text-align: center; padding: 1rem; }
-    #map { height: 80vh; width: 100%; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Roboto, sans-serif;
+      background-color: #f7f7f7;
+    }
+
+    h1 {
+      text-align: center;
+      padding: 1rem;
+      background-color: #3e8e41;
+      color: white;
+      margin: 0;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    }
+
+    #map {
+      height: 75vh;
+      width: 100%;
+      border: 2px solid #ccc;
+      box-sizing: border-box;
+    }
+
+    #distance, #pointCount {
+      text-align: center;
+      font-size: 18px;
+      margin: 10px 0;
+    }
+
     #controls {
       text-align: center;
-      margin: 10px;
+      margin-bottom: 10px;
     }
+
     button {
       padding: 10px 20px;
       font-size: 16px;
+      margin: 5px;
       cursor: pointer;
-      margin: 0 5px;
+      border: none;
+      border-radius: 5px;
+      background-color: #4caf50;
+      color: white;
+      transition: background-color 0.2s ease;
     }
-    #distance {
+
+    button:hover {
+      background-color: #45a049;
+    }
+
+    button:disabled {
+      background-color: #ccc;
+      cursor: not-allowed;
+    }
+
+    #instructions {
       text-align: center;
-      font-size: 18px;
+      font-size: 14px;
+      color: #555;
+      padding: 0 10px 20px;
     }
   </style>
 </head>
@@ -30,10 +73,18 @@
   <h1>Itinéraire Quad - Suivre la Route ou Ligne Directe</h1>
   <div id="map"></div>
   <div id="distance">Distance: 0 km</div>
+  <div id="pointCount">Points sur la carte : 0</div>
+
   <div id="controls">
-    <button id="reset">Réinitialiser</button>
-    <button id="exportGPX">Exporter en GPX</button>
-    <button id="undo">Annuler dernier point</button>
+    <button id="reset">🗑 Réinitialiser le parcours</button>
+    <button id="exportGPX">💾 Exporter en GPX</button>
+    <button id="undo">↩️ Annuler dernier point</button>
+  </div>
+
+  <div id="instructions">
+    📍 Cliquez sur la carte pour ajouter des points.<br />
+    ↩️ Annulez le dernier point avec "Annuler".<br />
+    💾 Exportez votre parcours au format GPX pour l'utiliser dans Outdooractive.
   </div>
 
   <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
@@ -41,7 +92,7 @@
     const map = L.map('map', {
       zoomControl: true,
       inertia: false
-    }).setView([48.8566, 2.3522], 13);
+    }).setView([47.083, -1.800], 15); // Sainte-Pazanne
 
     L.tileLayer('https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v11/tiles/{z}/{x}/{y}?access_token=pk.eyJ1IjoibWFudTc1MGdzeHIiLCJhIjoiY205aTZjaGw3MGJhbzJqc2NmcjU3bTJhdyJ9.BPVw3T_ApvhxVh7AZB__sA', {
       attribution: '© OpenStreetMap, © Mapbox',
@@ -138,32 +189,32 @@
         }
       }
       document.getElementById('distance').textContent = `Distance: ${(dist / 1000).toFixed(2)} km`;
+      document.getElementById('pointCount').textContent = `Points sur la carte : ${points.length}`;
     }
 
-	function exportToGPX() {
-	  if (points.length < 2) return alert("Ajoute au moins deux points.");
+    function exportToGPX() {
+      if (points.length < 2) return alert("Ajoute au moins deux points.");
 
-	  const name = prompt("Nom du fichier GPX:", "itineraire_quad") || "itineraire_quad";
+      const name = prompt("Nom du fichier GPX:", "itineraire_quad") || "itineraire_quad";
 
-	  let gpxContent = `<?xml version="1.0" encoding="UTF-8"?>\n`;
-	  gpxContent += `<gpx version="1.1" creator="QuadLibre" xmlns="http://www.topografix.com/GPX/1/1">\n`;
-	  gpxContent += `<trk><name>${name}</name><trkseg>\n`;
+      let gpxContent = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+      gpxContent += `<gpx version="1.1" creator="QuadLibre" xmlns="http://www.topografix.com/GPX/1/1">\n`;
+      gpxContent += `<trk><name>${name}</name><trkseg>\n`;
 
-	  for (let [lat, lng] of points) {
-		gpxContent += `  <trkpt lat="${lat}" lon="${lng}"></trkpt>\n`;
-	  }
+      for (let [lat, lng] of points) {
+        gpxContent += `  <trkpt lat="${lat}" lon="${lng}"></trkpt>\n`;
+      }
 
-	  gpxContent += `</trkseg></trk></gpx>`;
+      gpxContent += `</trkseg></trk></gpx>`;
 
-	  const blob = new Blob([gpxContent], { type: 'application/gpx+xml' });
-	  const url = URL.createObjectURL(blob);
+      const blob = new Blob([gpxContent], { type: 'application/gpx+xml' });
+      const url = URL.createObjectURL(blob);
 
-	  const a = document.createElement('a');
-	  a.href = url;
-	  a.download = `${name}.gpx`;
-	  a.click();
-	}
-
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${name}.gpx`;
+      a.click();
+    }
 
     function resetMap() {
       points = [];
@@ -174,7 +225,7 @@
       markers = [];
       polylines.forEach(p => map.removeLayer(p));
       polylines = [];
-      document.getElementById('distance').textContent = `Distance: 0 km`;
+      updateDistance();
     }
 
     document.getElementById('reset').addEventListener('click', resetMap);
