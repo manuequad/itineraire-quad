@@ -249,6 +249,19 @@
       }
       drawRoute();
     });
+document.getElementById('mapStyle').addEventListener('change', (e) => {
+  const selected = e.target.value;
+  if (selected === 'satellite') {
+    map.removeLayer(normalLayer);
+    satelliteLayer.addTo(map);
+    currentLayer = satelliteLayer;
+  } else {
+    map.removeLayer(satelliteLayer);
+    normalLayer.addTo(map);
+    currentLayer = normalLayer;
+  }
+});
+
   </script>
 </body>
 </html>
